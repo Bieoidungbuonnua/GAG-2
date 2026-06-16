@@ -217,7 +217,7 @@ Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
 -- fix bottom corners
 local topFix = mkFrame(Header, UDim2.new(1,0,0,10), UDim2.new(0,0,1,-10), C.header)
 
-local titleLbl = mkLabel(Header, "📦 AutoMail By Mtr Chill", 14, C.accent, Enum.Font.GothamBold, Enum.TextXAlignment.Left)
+local titleLbl = mkLabel(Header, "📦 AutoMail GAG2", 14, C.accent, Enum.Font.GothamBold, Enum.TextXAlignment.Left)
 titleLbl.Position = UDim2.new(0, 12, 0, 0)
 titleLbl.Size = UDim2.new(1, -80, 1, 0)
 
@@ -730,6 +730,10 @@ local function getTargetUid()
     return uid, nil
 end
 
+-- Server GAG2 giới hạn Count max 5000 per SendBatch
+-- => chia chunk để gửi số lượng lớn hơn (vd 10000 = 2 lần x 5000)
+local MAX_PER_BATCH = 5000
+
 -- Hàm send 1 vòng (dùng chung cho loop và once)
 local function sendOneRound(uid, total, skip)
     local payload = collectPayload()
@@ -739,18 +743,33 @@ local function sendOneRound(uid, total, skip)
     end
     for i, item in ipairs(payload) do
         -- Không break giữa chừng - luôn gửi hết vòng hiện tại
-        setStatus(string.format(
-            "📨 [%d/%d] %s x%d  |  total: %d",
-            i, #payload, item.DisplayName, item.Count, total
-        ), C.accent)
-        local ok2, msg2 = sendBatch(uid, {
-            { Category = item.Category, ItemKey = item.ItemKey, Count = item.Count }
-        }, cfg.Note)
-        if ok2 then
-            total += item.Count
-        else
-            skip += 1
-            warn(string.format("[AutoMailUI] Skip '%s': %s", item.DisplayName, tostring(msg2)))
+        local remaining = item.Count
+        local chunkNum = 0
+        local chunks = math.ceil(item.Count / MAX_PER_BATCH)
+
+        while remaining > 0 do
+            chunkNum += 1
+            local chunk = math.min(remaining, MAX_PER_BATCH)
+            local suffix = chunks > 1 and string.format(" [%d/%d]", chunkNum, chunks) or ""
+            setStatus(string.format(
+                "📨 [%d/%d] %s x%d%s  |  total: %d",
+                i, #payload, item.DisplayName, chunk, suffix, total
+            ), C.accent)
+            local ok2, msg2 = sendBatch(uid, {
+                { Category = item.Category, ItemKey = item.ItemKey, Count = chunk }
+            }, cfg.Note)
+            if ok2 then
+                total += chunk
+                remaining -= chunk
+            else
+                skip += 1
+                warn(string.format("[AutoMailUI] Skip '%s' chunk%d: %s",
+                    item.DisplayName, chunkNum, tostring(msg2)))
+                break -- chunk fail thì bỏ item này
+            end
+            if remaining > 0 then
+                task.wait(1.8)
+            end
         end
         task.wait(1.8)
     end
