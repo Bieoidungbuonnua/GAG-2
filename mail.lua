@@ -10,9 +10,9 @@ local configPath = username .. "-sendmailgag2.json"
 
 -- ===================== DEFAULT CONFIG =====================
 local defaultConfig = {
-    Recipient = "neonsunny2207",
-    RecipientUserId = 1914581105,
-    Note = "auto-shipped from main",
+    Recipient = "nhap ten ngnhan",
+    RecipientUserId = 0,
+    Note = "Mtr Chill",
     Seeds = {
         Bamboo        = { enabled = false, amount = 1 },
         ["Glow Mushroom"] = { enabled = false, amount = 1 },
@@ -217,7 +217,7 @@ Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
 -- fix bottom corners
 local topFix = mkFrame(Header, UDim2.new(1,0,0,10), UDim2.new(0,0,1,-10), C.header)
 
-local titleLbl = mkLabel(Header, "📦 AutoMail GAG2", 14, C.accent, Enum.Font.GothamBold, Enum.TextXAlignment.Left)
+local titleLbl = mkLabel(Header, "📦 AutoMail By Mtr Chill", 14, C.accent, Enum.Font.GothamBold, Enum.TextXAlignment.Left)
 titleLbl.Position = UDim2.new(0, 12, 0, 0)
 titleLbl.Size = UDim2.new(1, -80, 1, 0)
 
@@ -228,6 +228,65 @@ senderLbl.Size = UDim2.new(1, -80, 0, 16)
 local closeBtn = mkBtn(Header, "✕", UDim2.new(0,26,0,26), UDim2.new(1,-32,0.5,-13), C.red, Color3.new(1,1,1))
 closeBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
+end)
+
+-- ── Nút tròn MT (toggle UI) ──────────────────────────────
+local MTBtn = Instance.new("TextButton")
+MTBtn.Size = UDim2.new(0, 48, 0, 48)
+MTBtn.Position = UDim2.new(0, 20, 0.5, -24)
+MTBtn.BackgroundColor3 = Color3.fromRGB(14, 40, 24)
+MTBtn.TextColor3 = Color3.fromRGB(80, 200, 140)
+MTBtn.Text = "MT"
+MTBtn.Font = Enum.Font.GothamBold
+MTBtn.TextSize = 15
+MTBtn.BorderSizePixel = 0
+MTBtn.ZIndex = 10
+local mtCorner = Instance.new("UICorner")
+mtCorner.CornerRadius = UDim.new(1, 0)
+mtCorner.Parent = MTBtn
+local mtStroke = Instance.new("UIStroke")
+mtStroke.Color = Color3.fromRGB(60, 180, 100)
+mtStroke.Thickness = 2
+mtStroke.Parent = MTBtn
+MTBtn.Parent = ScreenGui
+
+-- Drag MTBtn - dùng threshold 6px để phân biệt click vs drag
+local mtDragStart, mtStartPos, mtMoved
+MTBtn.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        mtDragStart = inp.Position
+        mtStartPos = MTBtn.Position
+        mtMoved = false
+    end
+end)
+UserInputService.InputChanged:Connect(function(inp)
+    if mtDragStart and inp.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = inp.Position - mtDragStart
+        if math.abs(delta.X) > 6 or math.abs(delta.Y) > 6 then
+            mtMoved = true
+        end
+        if mtMoved then
+            MTBtn.Position = UDim2.new(
+                mtStartPos.X.Scale, mtStartPos.X.Offset + delta.X,
+                mtStartPos.Y.Scale, mtStartPos.Y.Offset + delta.Y)
+        end
+    end
+end)
+MTBtn.InputEnded:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        if not mtMoved then
+            -- click thật
+            Main.Visible = not Main.Visible
+            MTBtn.BackgroundColor3 = Main.Visible
+                and Color3.fromRGB(14,40,24)
+                or  Color3.fromRGB(40,14,14)
+            MTBtn.TextColor3 = Main.Visible
+                and Color3.fromRGB(80,200,140)
+                or  Color3.fromRGB(200,80,80)
+        end
+        mtDragStart = nil
+        mtMoved = false
+    end
 end)
 
 -- Recipient row
@@ -275,13 +334,13 @@ end)
 
 -- Tab bar
 local tabBar = mkFrame(Main, UDim2.new(1,-20,0,28), UDim2.new(0,10,0,108), C.panel, 6)
-local tabNames = {"Seeds", "Pets"}
+local tabNames = {"Seeds", "Pets", "Log"}
 local tabs = {}
 local activeTab = "Seeds"
 local tabBtns = {}
 
 for i, name in ipairs(tabNames) do
-    local tabW = 155
+    local tabW = 100
     local tb = mkBtn(tabBar, name,
         UDim2.new(0, tabW, 1, -4),
         UDim2.new(0, (i-1)*(tabW+4) + 2, 0, 2),
@@ -335,6 +394,134 @@ listPad.PaddingTop = UDim.new(0, 4)
 listPad.PaddingLeft = UDim.new(0, 4)
 listPad.PaddingRight = UDim.new(0, 4)
 listPad.Parent = scrollFrame
+
+-- Log scroll frame (hiện khi tab Log active)
+local logFrame = mkFrame(Main, UDim2.new(1,-20,0,228), UDim2.new(0,10,0,174), C.panel, 6, C.border)
+logFrame.ClipsDescendants = true
+logFrame.Visible = false
+
+local logScroll = Instance.new("ScrollingFrame")
+logScroll.Size = UDim2.new(1,0,1,0)
+logScroll.BackgroundTransparency = 1
+logScroll.BorderSizePixel = 0
+logScroll.ScrollBarThickness = 3
+logScroll.ScrollBarImageColor3 = C.accent
+logScroll.CanvasSize = UDim2.new(0,0,0,0)
+logScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+logScroll.Parent = logFrame
+
+local logLayout = Instance.new("UIListLayout")
+logLayout.Padding = UDim.new(0, 2)
+logLayout.SortOrder = Enum.SortOrder.LayoutOrder
+logLayout.Parent = logScroll
+
+local logPad2 = Instance.new("UIPadding")
+logPad2.PaddingTop = UDim.new(0,4)
+logPad2.PaddingLeft = UDim.new(0,6)
+logPad2.PaddingRight = UDim.new(0,4)
+logPad2.Parent = logScroll
+
+-- Clear log button (chỉ hiện khi tab Log)
+local clearLogBtn = mkBtn(Main, "🗑 Clear Log", UDim2.new(1,-20,0,22),
+    UDim2.new(0,10,0,406), Color3.fromRGB(40,20,20), C.red)
+clearLogBtn.TextSize = 11
+clearLogBtn.Visible = false
+
+local logCount = 0
+local MAX_LOG = 300
+
+-- Màu theo loại log
+local LOG_COLORS = {
+    ok      = { bg = Color3.fromRGB(18,55,35),  text = Color3.fromRGB(80,220,140),  tag = "✅" },
+    fail    = { bg = Color3.fromRGB(55,18,18),  text = Color3.fromRGB(220,80,80),   tag = "❌" },
+    warn    = { bg = Color3.fromRGB(50,38,10),  text = Color3.fromRGB(220,170,50),  tag = "⚠" },
+    info    = { bg = Color3.fromRGB(20,28,45),  text = Color3.fromRGB(120,160,220), tag = "ℹ" },
+    sep     = { bg = Color3.fromRGB(22,22,32),  text = Color3.fromRGB(70,70,90),    tag = "" },
+    gift    = { bg = Color3.fromRGB(20,45,55),  text = Color3.fromRGB(80,190,220),  tag = "🎁" },
+    claim   = { bg = Color3.fromRGB(35,18,55),  text = Color3.fromRGB(180,130,255), tag = "📬" },
+}
+
+local function addLog(msg, kind)
+    logCount += 1
+    local frames = {}
+    for _, c in ipairs(logScroll:GetChildren()) do
+        if c:IsA("Frame") then table.insert(frames, c) end
+    end
+    if #frames >= MAX_LOG then frames[1]:Destroy() end
+
+    -- Auto-detect kind nếu không truyền
+    if not kind then
+        if msg:find("✅") or msg:find("thành công") or msg:find("Gift OK") then kind = "ok"
+        elseif msg:find("❌") or msg:find("fail") or msg:find("Fail") or msg:find("lỗi") then kind = "fail"
+        elseif msg:find("⚠") or msg:find("skip") or msg:find("Skip") then kind = "warn"
+        elseif msg:find("📬") or msg:find("Claim") or msg:find("claim") then kind = "claim"
+        elseif msg:find("🎁") or msg:find("Gift") or msg:find("gift") then kind = "gift"
+        elseif msg:find("──") or msg:find("---") then kind = "sep"
+        else kind = "info" end
+    end
+
+    local scheme = LOG_COLORS[kind] or LOG_COLORS.info
+
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1,-4,0,18)
+    row.BackgroundColor3 = scheme.bg
+    row.BackgroundTransparency = 0.3
+    row.LayoutOrder = logCount
+    local rc = Instance.new("UICorner")
+    rc.CornerRadius = UDim.new(0,4)
+    rc.Parent = row
+    row.Parent = logScroll
+
+    -- Time label
+    local timeLbl = Instance.new("TextLabel")
+    timeLbl.Size = UDim2.new(0,56,1,0)
+    timeLbl.Position = UDim2.new(0,4,0,0)
+    timeLbl.BackgroundTransparency = 1
+    timeLbl.TextColor3 = Color3.fromRGB(70,70,90)
+    timeLbl.Font = Enum.Font.Gotham
+    timeLbl.TextSize = 10
+    timeLbl.TextXAlignment = Enum.TextXAlignment.Left
+    timeLbl.Text = os.date("%H:%M:%S")
+    timeLbl.Parent = row
+
+    -- Message label
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1,-64,1,0)
+    lbl.Position = UDim2.new(0,62,0,0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = scheme.text
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 11
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextTruncate = Enum.TextTruncate.AtEnd
+    -- Bỏ emoji tag thừa, chỉ giữ nội dung
+    local cleanMsg = msg:gsub("^[✅❌⚠ℹ🎁📬%s]+", "")
+    lbl.Text = cleanMsg
+    lbl.Parent = row
+
+    -- Left color bar
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0,3,1,-4)
+    bar.Position = UDim2.new(0,0,0,2)
+    bar.BackgroundColor3 = scheme.text
+    bar.BorderSizePixel = 0
+    local bc = Instance.new("UICorner")
+    bc.CornerRadius = UDim.new(0,2)
+    bc.Parent = bar
+    bar.Parent = row
+
+    task.defer(function()
+        logScroll.CanvasPosition = Vector2.new(0, math.huge)
+    end)
+end
+
+clearLogBtn.MouseButton1Click:Connect(function()
+    for _, c in ipairs(logScroll:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+    logCount = 0
+    addLog("Log cleared", "sep")
+end)
 
 -- Status bar
 local statusBar = mkFrame(Main, UDim2.new(1,-20,0,20), UDim2.new(0,10,0,406), C.header)
@@ -487,7 +674,15 @@ local function switchTab(name)
             tb.TextColor3 = C.muted
         end
     end
-    buildRows(name)
+    local isLog = (name == "Log")
+    listFrame.Visible = not isLog
+    searchRow.Visible = not isLog
+    logFrame.Visible = isLog
+    clearLogBtn.Visible = isLog
+    -- status bar Y: Log tab dời lên vì không có clear btn overlap
+    if not isLog then
+        buildRows(name)
+    end
 end
 
 for _, name in ipairs(tabNames) do
@@ -645,7 +840,7 @@ local function collectPayload()
     local seedCfg = cfg["Seeds"] or {}
     for name, data in pairs(seedCfg) do
         if type(data) == "table" and data.enabled then
-            local amt = math.clamp(math.floor(tonumber(data.amount) or 1), 1, 10000)
+            local amt = math.clamp(math.floor(tonumber(data.amount) or 1), 1, 9999)
             local itemKey = SEED_KEY_MAP[name] or name
             table.insert(payload, {
                 Category    = "Seeds",
@@ -730,11 +925,9 @@ local function getTargetUid()
     return uid, nil
 end
 
--- Server GAG2 giới hạn Count max 5000 per SendBatch
--- => chia chunk để gửi số lượng lớn hơn (vd 10000 = 2 lần x 5000)
-local MAX_PER_BATCH = 5000
-
 -- Hàm send 1 vòng (dùng chung cho loop và once)
+-- Method từ file gốc: gửi thẳng Count 9999 trong 1 lần SendBatch
+-- Nếu nhập cao hơn số lượng thực có, server vẫn gift được bao nhiêu thì gift
 local function sendOneRound(uid, total, skip)
     local payload = collectPayload()
     if #payload == 0 then
@@ -742,36 +935,38 @@ local function sendOneRound(uid, total, skip)
         return total, skip
     end
     for i, item in ipairs(payload) do
-        -- Không break giữa chừng - luôn gửi hết vòng hiện tại
-        local remaining = item.Count
-        local chunkNum = 0
-        local chunks = math.ceil(item.Count / MAX_PER_BATCH)
-
-        while remaining > 0 do
-            chunkNum += 1
-            local chunk = math.min(remaining, MAX_PER_BATCH)
-            local suffix = chunks > 1 and string.format(" [%d/%d]", chunkNum, chunks) or ""
-            setStatus(string.format(
-                "📨 [%d/%d] %s x%d%s  |  total: %d",
-                i, #payload, item.DisplayName, chunk, suffix, total
-            ), C.accent)
-            local ok2, msg2 = sendBatch(uid, {
-                { Category = item.Category, ItemKey = item.ItemKey, Count = chunk }
-            }, cfg.Note)
-            if ok2 then
-                total += chunk
-                remaining -= chunk
+        setStatus(string.format(
+            "📨 [%d/%d] %s x%d  |  total: %d",
+            i, #payload, item.DisplayName, item.Count, total
+        ), C.accent)
+        local ok2, msg2 = sendBatch(uid, {
+            { Category = item.Category, ItemKey = item.ItemKey, Count = item.Count }
+        }, cfg.Note)
+        if ok2 then
+            -- msg2 có thể chứa số lượng thật được gửi từ server
+            local actualCount = tonumber(tostring(msg2):match("%d+")) or item.Count
+            total += actualCount
+            if actualCount < item.Count then
+                -- Gửi ít hơn nhập (server clamp theo inventory)
+                addLog(string.format(
+                    "Gift %s: đã gift x%d / yêu cầu x%d",
+                    item.DisplayName, actualCount, item.Count
+                ), "warn")
             else
-                skip += 1
-                warn(string.format("[AutoMailUI] Skip '%s' chunk%d: %s",
-                    item.DisplayName, chunkNum, tostring(msg2)))
-                break -- chunk fail thì bỏ item này
+                addLog(string.format(
+                    "Gift %s x%d — OK",
+                    item.DisplayName, actualCount
+                ), "ok")
             end
-            if remaining > 0 then
-                task.wait(1.8)
-            end
+        else
+            skip += 1
+            local errMsg = tostring(msg2 or "unknown")
+            addLog(string.format("Gift %s — FAIL: %s", item.DisplayName, errMsg), "fail")
+            warn(string.format("[AutoMailUI] Skip '%s': %s", item.DisplayName, errMsg))
         end
-        task.wait(1.8)
+        if i < #payload then
+            task.wait(1.8)
+        end
     end
     return total, skip
 end
@@ -816,6 +1011,7 @@ startBtn.MouseButton1Click:Connect(function()
         startBtn.Text = "▶  Start Gift ALL"
         startBtn.BackgroundColor3 = C.accent
         startBtn.TextColor3 = Color3.fromRGB(10,20,15)
+        addLog(string.format("Stop | gửi: %d | skip: %d", roundTotal, roundSkip), "sep")
         setStatus(string.format("⏹ Đã dừng | tổng gửi: %d | skip: %d", roundTotal, roundSkip), C.muted)
     end)
 end)
@@ -843,6 +1039,7 @@ onceBtn.MouseButton1Click:Connect(function()
         running = false
         onceBtn.Text = "⚡  Send Gift 1 lần"
         onceBtn.BackgroundColor3 = Color3.fromRGB(60,80,160)
+        addLog(string.format("1 lần xong | gửi: %d | skip: %d", total, skip), "info")
         setStatus(string.format("✅ Done | gửi: %d | skip: %d", total, skip),
             skip > 0 and C.red or C.accent)
     end)
@@ -910,7 +1107,9 @@ claimBtn.MouseButton1Click:Connect(function()
                     end)
                     if cok and success then
                         totalClaimed += 1
+                        addLog("Claimed mail #" .. tostring(i), "claim")
                     else
+                        addLog("Claim fail #" .. tostring(i) .. ": " .. tostring(reason or success), "fail")
                         warn("[AutoMailUI] Claim fail:", mailId, tostring(reason or success))
                     end
                     task.wait(CLAIM_DELAY)
