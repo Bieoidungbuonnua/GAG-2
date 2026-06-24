@@ -42,7 +42,7 @@ local defaultConfig = {
         ["Dragon's Breath"]= { enabled = false, amount = 1 },
         ["Ghost Pepper"]   = { enabled = false, amount = 1 },
         ["Glow Mushroom"]  = { enabled = false, amount = 1 },
-        ["Gold Seed"]      = { enabled = false, amount = 1 },
+        ["Gold"]      = { enabled = false, amount = 1 },
         Grape              = { enabled = false, amount = 1 },
         ["Green Bean"]     = { enabled = false, amount = 1 },
         Hypnobloom         = { enabled = false, amount = 1 },
@@ -54,7 +54,7 @@ local defaultConfig = {
         ["Poison Apple"]   = { enabled = false, amount = 1 },
         ["Poison Ivy"]     = { enabled = false, amount = 1 },
         Pomegranate        = { enabled = false, amount = 1 },
-        ["Rainbow Seed"]   = { enabled = false, amount = 1 },
+        ["Rainbow"]   = { enabled = false, amount = 1 },
         Romanesco          = { enabled = false, amount = 1 },
         Strawberry         = { enabled = false, amount = 1 },
         Sunflower          = { enabled = false, amount = 1 },
@@ -153,6 +153,24 @@ end
 cfg.Recipient       = cfg.Recipient       or defaultConfig.Recipient
 cfg.RecipientUserId = cfg.RecipientUserId or defaultConfig.RecipientUserId
 cfg.Note            = cfg.Note            or defaultConfig.Note
+
+-- Migration: xóa key cũ đã đổi tên để tránh dupe
+local _seedMigrate = {
+    ["Gold Seed"]    = "Gold",
+    ["Rainbow Seed"] = "Rainbow",
+}
+if type(cfg.Seeds) == "table" then
+    for oldKey, newKey in pairs(_seedMigrate) do
+        if cfg.Seeds[oldKey] ~= nil then
+            -- Giữ state (enabled/amount) nếu key mới chưa có
+            if cfg.Seeds[newKey] == nil then
+                cfg.Seeds[newKey] = cfg.Seeds[oldKey]
+            end
+            cfg.Seeds[oldKey] = nil  -- xóa key cũ
+        end
+    end
+    saveConfig(cfg)  -- lưu lại config đã migrate
+end
 
 -- =====================================================================
 -- UI HELPERS
@@ -263,6 +281,11 @@ local function getPos2(inp)
     return Vector2.new(inp.Position.X, inp.Position.Y)
 end
 
+-- Header — tạo TRƯỚC khi gắn event drag
+local Header = mkFrame(Main, UDim2.new(1,0,0,38), UDim2.new(0,0,0,0), C.header, 10)
+mkFrame(Header, UDim2.new(1,0,0,10), UDim2.new(0,0,1,-10), C.header)
+
+-- Drag: Header làm handle, hỗ trợ cả touch lẫn mouse
 Header.InputBegan:Connect(function(inp)
     if isBeginInput(inp) then
         dragging = true
@@ -285,9 +308,6 @@ UserInputService.InputChanged:Connect(function(inp)
     end
 end)
 
--- Header
-local Header = mkFrame(Main, UDim2.new(1,0,0,38), UDim2.new(0,0,0,0), C.header, 10)
-mkFrame(Header, UDim2.new(1,0,0,10), UDim2.new(0,0,1,-10), C.header)
 
 local titleLbl = mkLabel(Header, "📦 AutoMail By Mtr Chill", 14, C.accent, Enum.Font.GothamBold, Enum.TextXAlignment.Left)
 titleLbl.Position = UDim2.new(0, 12, 0, 0)
@@ -622,11 +642,33 @@ searchIcon.Size = UDim2.new(0,24,1,0); searchIcon.TextXAlignment = Enum.TextXAli
 
 local searchBox = Instance.new("TextBox")
 searchBox.Text = ""; searchBox.PlaceholderText = "Tìm kiếm item..."
-searchBox.Size = UDim2.new(1,-28,1,0); searchBox.Position = UDim2.new(0,26,0,0)
+searchBox.Size = UDim2.new(1,-62,1,0); searchBox.Position = UDim2.new(0,26,0,0)
 searchBox.BackgroundTransparency = 1; searchBox.TextColor3 = C.text
 searchBox.PlaceholderColor3 = C.muted; searchBox.TextSize = 12
 searchBox.Font = Enum.Font.Gotham; searchBox.TextXAlignment = Enum.TextXAlignment.Left
 searchBox.Parent = searchRow
+
+-- Nút Refresh Inv
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Text = "🔄"
+refreshBtn.Size = UDim2.new(0,28,0,22); refreshBtn.Position = UDim2.new(1,-32,0.5,-11)
+refreshBtn.BackgroundColor3 = Color3.fromRGB(30,40,55); refreshBtn.TextColor3 = C.blue
+refreshBtn.TextSize = 14; refreshBtn.Font = Enum.Font.Gotham; refreshBtn.BorderSizePixel = 0
+Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0,6)
+local _rbs = Instance.new("UIStroke", refreshBtn)
+_rbs.Color = C.blue; _rbs.Thickness = 1
+refreshBtn.Parent = searchRow
+refreshBtn.MouseButton1Click:Connect(function()
+    refreshBtn.Text = "⏳"
+    refreshBtn.TextColor3 = C.muted
+    refreshInv()
+    task.delay(2, function()
+        if refreshBtn and refreshBtn.Parent then
+            refreshBtn.Text = "🔄"
+            refreshBtn.TextColor3 = C.blue
+        end
+    end)
+end)
 
 -- Item list
 local listFrame = mkFrame(Main, UDim2.new(1,-20,0,228), UDim2.new(0,10,0,174), C.panel, 6, C.border)
@@ -768,6 +810,42 @@ local claimBtn = mkBtn(Main, "📬  Auto Claim Mail",
 claimBtn.Font = Enum.Font.GothamBold; claimBtn.TextSize = 12
 
 -- =====================================================================
+-- INVENTORY CACHE (phải khai báo trước buildRows)
+-- =====================================================================
+local invCache        = nil    -- snapshot inventory mới nhất
+local invCacheLoading = false  -- đang load
+
+local function getInvCount(category, itemKey)
+    if not invCache then return nil end
+    local section = invCache[category]
+    if type(section) ~= "table" then return 0 end
+    local v = section[itemKey]
+    if type(v) == "number" then return math.floor(v)
+    elseif type(v) == "table" then
+        for _, f in ipairs({"Amount","Count","Quantity","amount","count"}) do
+            if type(v[f]) == "number" then return math.floor(v[f]) end
+        end
+    end
+    return 0
+end
+
+local function countPetsInCache(petName)
+    if not invCache or type(invCache.Pets) ~= "table" then return nil end
+    local count = 0
+    local norm = petName:lower():gsub("%s+","")
+    for _, entry in pairs(invCache.Pets) do
+        if type(entry) == "table" and entry.Id ~= nil then
+            local n = ""
+            for _, f in ipairs({"Name","PetName","Species","DisplayName","Type","Kind"}) do
+                if entry[f] and tostring(entry[f]) ~= "" then n = tostring(entry[f]); break end
+            end
+            if n:lower():gsub("%s+","") == norm or n == petName then count += 1 end
+        end
+    end
+    return count
+end
+
+-- =====================================================================
 -- ITEM ROWS
 -- =====================================================================
 local function buildRows(tabName)
@@ -791,6 +869,20 @@ local function buildRows(tabName)
         local data = section[name]
         if filter == "" or name:lower():find(filter, 1, true) then
             order += 1
+
+            -- Đọc số lượng từ cache
+            local invQty = nil
+            if tabName == "Seeds" then
+                invQty = getInvCount("Seeds", name)
+            elseif tabName == "Pets" then
+                invQty = countPetsInCache(name)
+            elseif tabName == "Gear" then
+                local section2 = GEAR_SECTION_MAP and GEAR_SECTION_MAP[name]
+                if section2 then
+                    invQty = getInvCount(section2, GEAR_KEY_MAP and GEAR_KEY_MAP[name] or name)
+                end
+            end
+
             local row = mkFrame(scrollFrame,
                 UDim2.new(1,-4,0,32), UDim2.new(0,0,0,0),
                 data.enabled and C.itemOn or C.itemBg,
@@ -808,9 +900,21 @@ local function buildRows(tabName)
             dot.Size = UDim2.new(0,18,1,0); dot.Position = UDim2.new(0,8,0,0)
             dot.TextXAlignment = Enum.TextXAlignment.Center
 
-            local nameLbl = mkLabel(row, name, 12,
-                data.enabled and C.accent or C.text, Enum.Font.Gotham)
+            -- Tên + số lượng inventory
+            local nameText = name
+            local nameColor = data.enabled and C.accent or C.text
+            if invQty ~= nil then
+                if invQty == 0 then
+                    nameText = name .. " [0]"
+                    nameColor = data.enabled and C.accent or Color3.fromRGB(160,100,100)
+                else
+                    nameText = name .. " " .. invQty
+                end
+            end
+
+            local nameLbl = mkLabel(row, nameText, 12, nameColor, Enum.Font.Gotham)
             nameLbl.Size = UDim2.new(1,-100,1,0); nameLbl.Position = UDim2.new(0,28,0,0)
+            nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
 
             local amtLbl = mkLabel(row, "x", 11, C.muted, Enum.Font.Gotham, Enum.TextXAlignment.Right)
             amtLbl.Size = UDim2.new(0,14,1,0); amtLbl.Position = UDim2.new(1,-72,0,0)
@@ -865,18 +969,21 @@ searchBox:GetPropertyChangedSignal("Text"):Connect(function() buildRows(activeTa
 switchTab("Seeds")
 
 -- =====================================================================
--- SEND LOGIC — Networking
+-- SEND LOGIC — Networking (async init, không block main thread)
 -- =====================================================================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local SharedModules = ReplicatedStorage:WaitForChild("SharedModules", 10)
 local Networking = nil
-if SharedModules then
-    local nm = SharedModules:FindFirstChild("Networking")
-    if nm then
-        local ok, r = pcall(require, nm)
-        if ok then Networking = r end
+
+task.spawn(function()
+    local SM = ReplicatedStorage:WaitForChild("SharedModules", 15)
+    if SM then
+        local nm = SM:FindFirstChild("Networking")
+        if nm then
+            local ok, r = pcall(require, nm)
+            if ok then Networking = r end
+        end
     end
-end
+end)
 
 -- ── Key Maps ─────────────────────────────────────────────────────────
 -- [FIX 1] SEED_KEY_MAP: Xác nhận bằng dump_seed_shop.lua
@@ -912,13 +1019,17 @@ local GEAR_SECTION_MAP = {
     ["Wheelbarrow"]           = "Wheelbarrows",
 }
 
--- ── Inventory access ──────────────────────────────────────────────────
+-- ── Inventory access (async) ──────────────────────────────────
 local _PSC = nil
-pcall(function()
-    _PSC = require(
-        ReplicatedStorage:WaitForChild("ClientModules", 10)
-        :WaitForChild("PlayerStateClient", 10)
-    )
+task.spawn(function()
+    local ok, r = pcall(function()
+        local cm = ReplicatedStorage:WaitForChild("ClientModules", 15)
+        if not cm then return nil end
+        local psc = cm:WaitForChild("PlayerStateClient", 15)
+        if not psc then return nil end
+        return require(psc)
+    end)
+    if ok and r then _PSC = r end
 end)
 
 local function getInvSafe()
@@ -932,7 +1043,7 @@ local function getInvSafe()
         local t0 = os.clock()
         repeat
             local ok, r = pcall(function() return _PSC:GetLocalReplica() end)
-            if ok and r then replica = r break end
+            if ok and r then replica = r; break end
             task.wait(0.25)
         until os.clock() - t0 > 15
     end
@@ -941,6 +1052,29 @@ local function getInvSafe()
     end
     return nil
 end
+
+-- ── refreshInv (dùng getInvSafe được define bên dưới) ───────────────
+local function refreshInv()
+    if invCacheLoading then return end
+    invCacheLoading = true
+    setStatus("⏳ Đang đọc inventory...", C.muted)
+    task.spawn(function()
+        local inv = getInvSafe()
+        invCache = inv
+        invCacheLoading = false
+        if inv then
+            setStatus("✅ Inventory OK", C.accent)
+        else
+            setStatus("⚠ Không đọc được inv", C.muted)
+        end
+        if activeTab ~= "Log" then buildRows(activeTab) end
+    end)
+end
+
+-- Auto refresh lần đầu sau khi _PSC init xong (~3s)
+task.delay(3, function()
+    refreshInv()
+end)
 
 -- ── Networking helpers ────────────────────────────────────────────────
 local function resolveUserId(name, userId)
