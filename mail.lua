@@ -846,6 +846,35 @@ local function countPetsInCache(petName)
 end
 
 -- =====================================================================
+-- GEAR MAPS + FORWARD DECLARATIONS
+-- (phải được khai báo trước buildRows và refreshBtn)
+-- =====================================================================
+local GEAR_KEY_MAP = {}   -- empty: key game = display name
+local GEAR_SECTION_MAP = {
+    ["Common Watering Can"]   = "WateringCans",
+    ["Super Watering Can"]    = "WateringCans",
+    ["Uncommon Sprinkler"]    = "Sprinklers",
+    ["Rare Sprinkler"]        = "Sprinklers",
+    ["Legendary Sprinkler"]   = "Sprinklers",
+    ["Super Sprinkler"]       = "Sprinklers",
+    ["Trowel"]                = "Trowels",
+    ["Sign"]                  = "Signs",
+    ["Basic Pot"]             = "Pots",
+    ["Jump Mushroom"]         = "Mushrooms",
+    ["Speed Mushroom"]        = "Mushrooms",
+    ["Supersize Mushroom"]    = "Mushrooms",
+    ["Invisibility Mushroom"] = "Mushrooms",
+    ["Lantern"]               = "Lanterns",
+    ["Gnome"]                 = "Gnomes",
+    ["Flashbang"]             = "Flashbangs",
+    ["Teleporter"]            = "Teleporters",
+    ["Wheelbarrow"]           = "Wheelbarrows",
+}
+
+-- Forward declare refreshInv (sẽ được gán sau khi getInvSafe được define)
+local refreshInv
+
+-- =====================================================================
 -- ITEM ROWS
 -- =====================================================================
 local function buildRows(tabName)
@@ -991,33 +1020,10 @@ end)
 -- VD: inv.Seeds["Dragon's Breath"] = 1  (KHÔNG phải "DragonsBreath")
 local SEED_KEY_MAP = {}  -- empty: key game = display name
 
--- [FIX 2] GEAR_KEY_MAP: Xác nhận bằng dump_gear_shop.lua
--- key trong inv.WateringCans["Super Watering Can"] = display name
--- Các số từ MushroomData[N] là false positive (config, không phải inv key)
-local GEAR_KEY_MAP = {}  -- empty: key game = display name
+-- [FIX 2] GEAR_KEY_MAP: key game = display name y chang
+local GEAR_KEY_MAP = {}  -- already declared above, kept for reference
 
--- [FIX 3] GEAR_SECTION_MAP: map gear display name → inventory section
--- Dùng làm Category khi gọi Mailbox.SendBatch (thay vì Gifting.Send ghost)
-local GEAR_SECTION_MAP = {
-    ["Common Watering Can"]   = "WateringCans",
-    ["Super Watering Can"]    = "WateringCans",
-    ["Uncommon Sprinkler"]    = "Sprinklers",
-    ["Rare Sprinkler"]        = "Sprinklers",
-    ["Legendary Sprinkler"]   = "Sprinklers",
-    ["Super Sprinkler"]       = "Sprinklers",
-    ["Trowel"]                = "Trowels",
-    ["Sign"]                  = "Signs",
-    ["Basic Pot"]             = "Pots",
-    ["Jump Mushroom"]         = "Mushrooms",
-    ["Speed Mushroom"]        = "Mushrooms",
-    ["Supersize Mushroom"]    = "Mushrooms",
-    ["Invisibility Mushroom"] = "Mushrooms",
-    ["Lantern"]               = "Lanterns",
-    ["Gnome"]                 = "Gnomes",
-    ["Flashbang"]             = "Flashbangs",
-    ["Teleporter"]            = "Teleporters",
-    ["Wheelbarrow"]           = "Wheelbarrows",
-}
+-- [FIX 3] GEAR_SECTION_MAP: already declared above
 
 -- ── Inventory access (async) ──────────────────────────────────
 local _PSC = nil
@@ -1053,8 +1059,8 @@ local function getInvSafe()
     return nil
 end
 
--- ── refreshInv (dùng getInvSafe được define bên dưới) ───────────────
-local function refreshInv()
+-- ── refreshInv ────────────────────────────────────────────────
+refreshInv = function()
     if invCacheLoading then return end
     invCacheLoading = true
     setStatus("⏳ Đang đọc inventory...", C.muted)
@@ -1443,6 +1449,25 @@ claimBtn.MouseButton1Click:Connect(function()
                 end
                 for i, mailId in ipairs(ids) do
                     if not claimRunning then break end
+
+                    -- Đọc thông tin mail trước khi claim
+                    local mailData = type(inbox[mailId]) == "table" and inbox[mailId] or nil
+                    local sender = ""
+                    local itemLines = {}
+                    if mailData then
+                        sender = tostring(mailData.Sender or mailData.From or mailData.SenderName or "")
+                        local items = mailData.Items or mailData.Gifts or mailData.Contents or mailData.Payload
+                        if type(items) == "table" then
+                            for _, item in ipairs(items) do
+                                if type(item) == "table" then
+                                    local iname = tostring(item.ItemKey or item.Name or item.Key or item.Id or "?")
+                                    local icount = tonumber(item.Count or item.Amount or item.Quantity or 1)
+                                    table.insert(itemLines, iname .. " x" .. (icount or 1))
+                                end
+                            end
+                        end
+                    end
+
                     setStatus(string.format("📬 Claim [%d/%d] | tổng: %d", i, #ids, totalClaimed),
                         Color3.fromRGB(210,180,255))
                     local cok, success, reason = pcall(function()
@@ -1450,12 +1475,17 @@ claimBtn.MouseButton1Click:Connect(function()
                     end)
                     if cok and success then
                         totalClaimed += 1
-                        addLog("Claimed mail #" .. i, "claim")
+                        if #itemLines > 0 then
+                            addLog("📦 " .. table.concat(itemLines, ", "), "claim")
+                        else
+                            addLog("📦 Claim #" .. i, "claim")
+                        end
                     else
-                        addLog("Claim fail #" .. i .. ": " .. tostring(reason or success), "fail")
+                        addLog("❌ Claim fail #" .. i .. ": " .. tostring(reason or success), "fail")
                     end
                     task.wait(0.3)
                 end
+
             end
         end
         claimBtn.Text = "📬  Auto Claim Mail"
